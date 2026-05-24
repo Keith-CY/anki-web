@@ -54,7 +54,8 @@ Local server commands require Node 22 or newer for Anki package compression supp
 ## Coolify
 
 Use the included `Dockerfile`, expose port `3000`, and mount persistent storage to `/data`. The container defines a Docker
-health check against `GET /health`, which should return `{"ok":true}` when the app is ready.
+health check against `GET /health`, which should return `{"ok":true}` when the app is ready. For the full deployment
+handoff checklist, see [docs/coolify-deployment.md](docs/coolify-deployment.md).
 
 When Docker is available locally, run the deployment smoke check with:
 
