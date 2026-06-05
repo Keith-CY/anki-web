@@ -446,13 +446,24 @@ function Workspace({ api, tab, setTab }: { api: ApiClient; tab: Tab; setTab: (ta
     }
   };
 
+  const selectedStudyDeck = selectedDeck ? decks.find((deck) => deck.id === selectedDeck) ?? null : null;
+  const studyDeckLabel = selectedStudyDeck ? deckPathLabel(selectedStudyDeck, decks) : "All decks";
+
   if (tab === "study") {
     return (
-      <main className="study-screen">
+      <main className={clsx("study-screen", dueCard && "study-screen-session", showAnswer && "answer-visible")}>
+        {dueCard ? (
+          <StudySessionBar
+            daily={stats.daily}
+            deckLabel={studyDeckLabel}
+            dueCount={stats.due}
+            onExit={() => setTab("decks")}
+          />
+        ) : null}
         <Header title="Today" subtitle={`${stats.due} due · ${stats.drafts} drafts waiting`} />
         <DeckPicker decks={decks} value={selectedDeck} onChange={selectDeck} />
         {stats.daily ? <DailyProgress daily={stats.daily} /> : null}
-        <section className="review-stage">
+        <section className={clsx("review-stage", dueCard && "active-review", showAnswer && "answer-visible")}>
           {dueCard ? (
             <>
               <CardHtml card={dueCard} side={showAnswer ? "answer" : "question"} />
@@ -462,8 +473,9 @@ function Workspace({ api, tab, setTab }: { api: ApiClient; tab: Tab; setTab: (ta
                 <span>{dueCard.tags.join(", ") || "untagged"}</span>
               </div>
               <button
-                className="secondary wide"
+                className="secondary wide review-audio-button"
                 disabled={reviewAudioBusy || !reviewAudioText(dueCard)}
+                title={reviewAudioButtonLabel(dueCard)}
                 onClick={async () => {
                   setReviewAudioBusy(true);
                   setMessage(null);
@@ -478,15 +490,15 @@ function Workspace({ api, tab, setTab }: { api: ApiClient; tab: Tab; setTab: (ta
                 }}
               >
                 {reviewAudioBusy ? <Loader2 className="spin" /> : <Volume2 />}
-                {reviewAudioButtonLabel(dueCard)}
+                <span className="review-audio-label">{reviewAudioButtonLabel(dueCard)}</span>
               </button>
               {!showAnswer ? (
-                <div className="review-action-stack">
+                <div className="review-action-stack review-controls">
                   <button className="primary wide" onClick={() => setShowAnswer(true)}>
                     Show answer
                   </button>
                   <button
-                    className="secondary wide"
+                    className="secondary wide review-skip-button"
                     onClick={async () => {
                       setMessage(null);
                       try {
@@ -500,11 +512,11 @@ function Workspace({ api, tab, setTab }: { api: ApiClient; tab: Tab; setTab: (ta
                     }}
                   >
                     <SkipForward />
-                    Skip until tomorrow
+                    <span>Skip until tomorrow</span>
                   </button>
                 </div>
               ) : (
-                <div className="rating-grid">
+                <div className="rating-grid review-controls">
                   {(["Again", "Hard", "Good", "Easy"] as const).map((rating) => {
                     const ratingState = reviewRatingButtonState(rating, reviewSubmittingRating);
                     return (
@@ -1749,6 +1761,43 @@ function DailyProgress({
   );
 }
 
+function StudySessionBar({
+  daily,
+  deckLabel,
+  dueCount,
+  onExit
+}: {
+  daily: StatsPayload["daily"];
+  deckLabel: string;
+  dueCount: number;
+  onExit: () => void;
+}) {
+  const dailyDone = daily ? daily.newDone + daily.reviewDone : 0;
+  const dailyLimit = daily ? daily.newLimit + daily.reviewLimit : 0;
+  const progress = dailyLimit > 0 ? Math.min(100, Math.round((dailyDone / dailyLimit) * 100)) : dueCount > 0 ? 0 : 100;
+  const progressLabel = dailyLimit > 0 ? `${dailyDone}/${dailyLimit} today` : dueCount > 0 ? `${dueCount} remaining` : "Complete";
+
+  return (
+    <div className="mobile-study-bar" aria-label="Study session">
+      <button type="button" className="secondary mobile-study-exit" onClick={onExit} aria-label="Back to decks">
+        <ChevronLeft />
+        <span>Decks</span>
+      </button>
+      <div className="mobile-study-status">
+        <strong>{deckLabel}</strong>
+        <span>{progressLabel}</span>
+        <div className="mobile-study-progress" aria-hidden="true">
+          <span style={{ width: `${progress}%` }} />
+        </div>
+      </div>
+      <div className="mobile-study-count" aria-label={`${dueCount} due cards`}>
+        <strong>{dueCount}</strong>
+        <span>due</span>
+      </div>
+    </div>
+  );
+}
+
 function DeckPicker({ decks, value, onChange }: { decks: Deck[]; value: string; onChange: (id: string) => void }) {
   const options = deckTreeOptions(decks);
   return (
@@ -2830,9 +2879,9 @@ function CardHtml({ card, side }: { card: ReviewCard; side: "question" | "answer
     const root = host.shadowRoot ?? host.attachShadow({ mode: "open" });
     const style = document.createElement("style");
     style.textContent = [
-      ":host { display: block; font-size: 24px; line-height: 1.6; text-align: center; color: inherit; }",
+      ":host { display: block; font-size: var(--card-html-font-size, 24px); line-height: 1.6; text-align: center; color: inherit; }",
       ".card { font-family: inherit; }",
-      ".jp { font-size: 42px; }",
+      ".jp { font-size: var(--card-html-jp-font-size, 42px); }",
       "img, video { max-width: 100%; height: auto; }",
       "audio { max-width: 100%; }",
       sanitizeNoteTypeCss(card.noteType.css)
