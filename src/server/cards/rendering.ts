@@ -23,12 +23,27 @@ export function renderCardTemplate(template: string, fields: FieldMap, frontSide
     return renderClozeField(String(value), options);
   });
 
+  html = html.replace(/{{(furigana|kanji|kana):+([^}]+)}}/g, (_match, filterName: string, fieldName: string) => {
+    const value = String(fields[fieldName.trim()] ?? "");
+    return renderJapaneseFieldFilter(filterName, value);
+  });
+
   html = html.replace(/{{([^#/^}][^}]*)}}/g, (_match, fieldName: string) => {
     const name = fieldName.trim();
     return fields[name] ?? "";
   });
 
   return sanitizeRenderedHtml(renderAnkiMediaMarkers(html));
+}
+
+function renderJapaneseFieldFilter(filterName: string, value: string) {
+  if (filterName === "kanji") return replaceFuriganaMarkup(value, "$1");
+  if (filterName === "kana") return replaceFuriganaMarkup(value, "$2");
+  return replaceFuriganaMarkup(value, "<ruby>$1<rt>$2</rt></ruby>");
+}
+
+function replaceFuriganaMarkup(value: string, replacement: string) {
+  return value.replace(/([^\s[\]<>()]+)\[([^\][\r\n]+)\]/g, replacement);
 }
 
 function renderClozeField(value: string, options: RenderCardOptions) {

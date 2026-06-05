@@ -78,4 +78,15 @@ describe("card template rendering", () => {
     expect(answer).toContain("勉強");
     expect(answer).not.toContain("{{c1::");
   });
+
+  test("renders Anki furigana filters from imported vocabulary templates", () => {
+    const html = renderCardTemplate("{{furigana:Reading}} {{furigana::Reading}} {{kanji:Reading}} {{kana:Reading}}", {
+      Reading: "嫌[いや]がる"
+    });
+
+    expect(html).toContain("<ruby>嫌<rt>いや</rt></ruby>がる");
+    expect(html).toContain("嫌がる");
+    expect(html).toContain("いやがる");
+    expect(html).not.toContain("{{furigana:");
+  });
 });
