@@ -497,7 +497,7 @@ export class AnkiPackageWorker {
       const file = zip.file(entry.zipName);
       if (!file) continue;
       const rawBuffer = await file.async("nodebuffer");
-      const buffer = packageFormat.zstdMedia ? zstdDecompressSync(rawBuffer) : rawBuffer;
+      const buffer = entry.compressed ? zstdDecompressSync(rawBuffer) : rawBuffer;
       validateImportedMedia(entry, buffer);
       const digest = checksum(buffer);
       const existing = this.services.db
@@ -794,6 +794,7 @@ interface PackageFormat {
 interface ImportedMediaEntry {
   zipName: string;
   originalName: string;
+  compressed: boolean;
   size: number | null;
   sha1: Buffer | null;
 }
@@ -828,16 +829,38 @@ async function readMediaMap(mediaFile: JSZip.JSZipObject, packageFormat: Package
       return entries.map((entry, index) => ({
         zipName: String(entry.legacyZipFilename ?? index),
         originalName: entry.name,
+        compressed: true,
         size: entry.size,
         sha1: entry.sha1
       }));
     } catch (error) {
+      const legacyEntries = parseLegacyMediaMapEntries(buffer);
+      if (legacyEntries) return legacyEntries;
       throw new Error(`Unable to read compressed media map: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
-  const mediaMap = parseJson<Record<string, string>>(buffer.toString("utf8"), {});
-  return Object.entries(mediaMap).map(([zipName, originalName]) => ({ zipName, originalName, size: null, sha1: null }));
+  const legacyEntries = parseLegacyMediaMapEntries(buffer);
+  return legacyEntries ?? [];
+}
+
+function parseLegacyMediaMapEntries(buffer: Buffer): ImportedMediaEntry[] | null {
+  let mediaMap: unknown;
+  try {
+    mediaMap = JSON.parse(buffer.toString("utf8"));
+  } catch {
+    return null;
+  }
+  if (!mediaMap || typeof mediaMap !== "object" || Array.isArray(mediaMap)) return null;
+  const entries = Object.entries(mediaMap);
+  if (entries.some(([, originalName]) => typeof originalName !== "string")) return null;
+  return entries.map(([zipName, originalName]) => ({
+    zipName,
+    originalName,
+    compressed: false,
+    size: null,
+    sha1: null
+  }));
 }
 
 function parsePackageMetadata(buffer: Buffer) {

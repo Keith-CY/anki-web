@@ -683,6 +683,22 @@ describe("Anki package worker", () => {
     expect(server.services.decks.listDecks().some((deck) => deck.name === "Compatibility Placeholder")).toBe(false);
   });
 
+  test("imports packages with modern metadata and an uncompressed empty media map", async () => {
+    const server = makeTestServer();
+    const sourcePackage = await buildModernMetadataApkgWithLegacyMediaMap();
+
+    const imported = await new AnkiPackageWorker(server.services).importPackage(sourcePackage, {
+      sourceUrl: "https://example.com/modern-empty-media-map.apkg",
+      includeScheduling: false
+    });
+    const deck = server.services.decks.listDecks().find((candidate) => candidate.name === "Modern Empty Media Map");
+
+    expect(imported.notesImported).toBe(1);
+    expect(imported.cardsImported).toBe(1);
+    expect(imported.mediaImported).toBe(0);
+    expect(deck).toBeTruthy();
+  });
+
   test("creates missing parent decks from imported Anki hierarchical deck names", async () => {
     const server = makeTestServer();
     const auth = await login(server);
@@ -1156,6 +1172,31 @@ async function buildCompressedModernApkgWithPlaceholder(mediaEntries: Array<{ na
     mediaEntries.forEach((entry, index) => {
       zip.file(String(index), zstdCompressSync(entry.data));
     });
+    return await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function buildModernMetadataApkgWithLegacyMediaMap() {
+  const tempDir = mkdtempSync(join(tmpdir(), "anki-modern-legacy-media-map-source-"));
+  try {
+    const collectionPath = join(tempDir, "collection.anki21");
+    createSimpleAnkiCollection(collectionPath, {
+      modelId: 3131313131,
+      deckId: 424242424,
+      deckName: "Modern Empty Media Map",
+      modelName: "Modern Legacy Media Map",
+      noteId: 535353535,
+      cardId: 646464646,
+      guid: "modern-legacy-media-map-guid",
+      fields: "単語\x1fword"
+    });
+
+    const zip = new JSZip();
+    zip.file("meta", encodePackageMetadata(2));
+    zip.file("collection.anki21", readFileSync(collectionPath));
+    zip.file("media", "{}");
     return await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
